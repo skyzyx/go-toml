@@ -586,7 +586,28 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 	for fieldIdx := 0; fieldIdx < structFieldsNum; fieldIdx++ {
 		field := stype.Field(fieldIdx)
 		fieldOpts := tomlOptions(field, annotation{tag: d.tagName}) // toml-specific options on this field
-		if t == nil || !t.Has(field.Name) { // value not in the tree
+
+		baseKey := fieldOpts.name
+		keysToTry := []string{
+			baseKey,
+			strings.ToLower(baseKey),
+			strings.ToTitle(baseKey),
+			strings.ToLower(string(baseKey[0])) + baseKey[1:],
+		}
+
+		found := false
+		keyName := ""
+		if t != nil {
+			for _, key := range keysToTry {
+				if t.Has(key) {
+					found = true
+					keyName = key
+					break
+				}
+			}
+		}
+
+		if !found { // value not in the tree
 			// use default if exists
 			if fieldOpts.defaultValue != "" {
 				defaultValue, err := defaultValueForField(field.Type, fieldOpts.defaultValue)
@@ -605,7 +626,7 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 		// we need to figure out what kind of object we need to decode
 		switch field.Type.Kind() {
 		case reflect.Struct:
-			subtree, err := subtreeForStructField(t, field)
+			subtree, err := subtreeForStructField(t, keyName)
 			if err != nil {
 				return err
 			}
@@ -614,7 +635,7 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				return err
 			}
 		case reflect.Map:
-			subtree, err := subtreeForStructField(t, field)
+			subtree, err := subtreeForStructField(t, keyName)
 			if err != nil {
 				return err
 			}
@@ -623,12 +644,12 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				return err
 			}
 		case reflect.Slice:
-			if t == nil || !t.Has(field.Name) {
+			if !found {
 				// nothing in the tree, create an empty slice
-				newSlice := reflect.MakeSlice(field.Type.Elem(), 0, 0)
+				newSlice := reflect.MakeSlice(field.Type, 0, 0)
 				vfield.Set(newSlice)
 			} else {
-				data := t.Get(field.Name)
+				data := t.Get(keyName)
 				dval := reflect.ValueOf(data)
 
 				if dval.Kind() != reflect.Slice {
@@ -654,7 +675,7 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				// non-nil pointer)
 				vfield.Set(allocateValueForPointer(field.Type.Elem()))
 			}
-			subtree, err := subtreeForStructField(t, field)
+			subtree, err := subtreeForStructField(t, keyName)
 			if err != nil {
 				return err
 			}
@@ -665,24 +686,23 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 		// all the default types
 		default: // hope for the best? TODO: check with custom type
 			// fill the value using whatever Tree returns.
-			if t != nil && t.Has(field.Name) {
-				val = t.Get(field.Name)
+			if found {
+				val = t.Get(keyName)
 				vfield.Set(reflect.ValueOf(val).Convert(field.Type))
 			}
-			continue
 		}
 	}
 	return nil
 }
 
-func subtreeForStructField(t *Tree, field reflect.StructField) (*Tree, error) {
+func subtreeForStructField(t *Tree, fieldName string) (*Tree, error) {
 	if t == nil {
 		return nil, nil
 	}
-	if !t.Has(field.Name) {
+	if !t.Has(fieldName) {
 		return nil, nil
 	}
-	subtree := t.Get(field.Name)
+	subtree := t.Get(fieldName)
 	st, ok := subtree.(*Tree)
 	if !ok {
 		return nil, fmt.Errorf("expected TOML group, got %T instead", subtree)

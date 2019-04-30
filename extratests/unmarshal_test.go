@@ -333,3 +333,71 @@ func TestUnmarshalStructArray(t *testing.T) {
 		t.Fatal("Ints is supposed to have 3 elements, not", len(s.Ints))
 	}
 }
+
+func TestUnmarshalArrayOfStructs(t *testing.T) {
+	type S struct {
+		A []struct{
+			Field int
+		}
+	}
+	s := S{}
+	data := []byte(`
+[[A]]
+Field = 1
+[[A]]
+Field = 2
+`)
+	err := toml.Unmarshal(data, &s)
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	if len(s.A) != 2 {
+		t.Fatal("A is supposed to have 2 elements, not", len(s.A))
+	}
+	if s.A[0].Field != 1 {
+		t.Error("expected s.A[0].Field == 1, not", s.A[0].Field)
+	}
+	if s.A[1].Field != 2 {
+		t.Error("expected s.A[1].Field == 2, not", s.A[1].Field)
+	}
+}
+
+func TestBasicUnmarshal(t *testing.T) {
+	type basicMarshalTestSubStruct struct {
+		String2 string
+	}
+	type basicMarshalTestStruct struct {
+		String     string                      `toml:"Zstring"`
+		StringList []string                    `toml:"Ystrlist"`
+		Sub        basicMarshalTestSubStruct   `toml:"Xsubdoc"`
+		SubList    []basicMarshalTestSubStruct `toml:"Wsublist"`
+	}
+
+	var basicTestToml = []byte(`Ystrlist = ["Howdy","Hey There"]
+Zstring = "Hello"
+
+[[Wsublist]]
+  String2 = "Two"
+
+[[Wsublist]]
+  String2 = "Three"
+
+[Xsubdoc]
+  String2 = "One"
+`)
+
+	result := basicMarshalTestStruct{}
+	err := toml.Unmarshal(basicTestToml, &result)
+	expected := basicMarshalTestStruct{
+		String:     "Hello",
+		StringList: []string{"Howdy", "Hey There"},
+		Sub:        basicMarshalTestSubStruct{"One"},
+		SubList:    []basicMarshalTestSubStruct{{"Two"}, {"Three"}},
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(result, expected) {
+		t.Errorf("Bad unmarshal: expected %v, got %v", expected, result)
+	}
+}
