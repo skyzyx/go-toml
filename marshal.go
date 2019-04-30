@@ -534,25 +534,64 @@ func (d *Decoder) unmarshal(v interface{}) error {
 	}
 }
 
+// keep on unwrapping pointers until there we end up on a pointer to a non-pointer
+func unwrapPtrs(ptr reflect.Value) reflect.Value {
+	for ptr.Elem().Kind() == reflect.Ptr {
+		ptr = ptr.Elem()
+	}
+	return ptr
+}
+
 func (d *Decoder) unmarshalPointer(v interface{}, treeElem interface{}) error {
 	ptype := reflect.TypeOf(v)
 	if ptype.Kind() != reflect.Ptr {
 		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
 	}
-
+	if ptype.Elem().Kind() == reflect.Ptr {
+		panic(fmt.Errorf("expected ptr to non-pointer, got pointer to %s", ptype.Elem().Kind()))
+	}
 	if reflect.ValueOf(v).IsNil() {
-		panic("unmarshalPoint expects a non-nil pointer")
+		panic("unmarshalPointer expects a non-nil pointer")
 	}
 
 	switch ptype.Elem().Kind() {
 	case reflect.Struct:
+		// That looks like a slippery slope
+		if _, ok := treeElem.(time.Time); ok {
+			return d.unmarshalBasicValue(v, treeElem)
+		}
 		return d.unmarshalStruct(v, treeElem.(*Tree))
 	case reflect.Map:
 		return d.unmarshalMap(v, treeElem.(*Tree))
 	default:
-		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(treeElem).Convert(ptype.Elem()))
-		return nil
+		return d.unmarshalBasicValue(v, treeElem)
 	}
+}
+
+func (d *Decoder) unmarshalBasicValue(v interface{}, treeElem interface{}) error {
+	ptype := reflect.TypeOf(v)
+
+	if ptype.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
+	}
+
+	if reflect.ValueOf(v).IsNil() {
+		panic("unmarshalBasicValue expects a non-nil pointer")
+	}
+
+	rawValue := reflect.ValueOf(treeElem)
+
+	// That seems finicky. What about pointers of pointers?
+	if ptype.Elem().Kind() == reflect.Ptr && rawValue.Kind() != reflect.Ptr {
+		newRawValue := reflect.New(ptype.Elem().Elem())
+		newRawValue.Elem().Set(rawValue.Convert(ptype.Elem().Elem()))
+		rawValue = newRawValue // wrap into pointer if necessary
+	} else {
+		rawValue = rawValue.Convert(ptype.Elem())
+	}
+
+	reflect.ValueOf(v).Elem().Set(rawValue)
+	return nil
 }
 
 // unmarshal given tree to a struct. assumes v is a pointer to a struct
@@ -660,7 +699,7 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				vfield.Set(newSlice)
 
 				for i := 0; i < dval.Len(); i++ {
-					targetPtr := newSlice.Index(i).Addr().Interface()
+					targetPtr := unwrapPtrs(newSlice.Index(i).Addr()).Interface()
 					dataElem := dval.Index(i).Interface()
 					err := d.unmarshalPointer(targetPtr, dataElem)
 					if err != nil {
@@ -765,7 +804,6 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 
 	// go over all keys at the root of the tree and unmarshal them based on the type of the map's values
 	for key, tomlVal := range t.values { // note: use t.values instead of t.Keys() to avoid unnecessary array creation
-		fmt.Println("LOOKING AT KEY", key)
 		vkey := reflect.ValueOf(key).Convert(ktype)
 		fieldVal := mval.MapIndex(vkey)
 		fieldType := vtype
@@ -774,7 +812,6 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 			fieldType = fieldVal.Type()
 		}
 
-		fmt.Println("KIND=", fieldType.Kind())
 		switch fieldType.Kind() {
 		case reflect.Struct:
 			// if the key does not exist in the map yet, allocate it
@@ -820,6 +857,7 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 			if !ok {
 				return fmt.Errorf("expected TOML group, got %T", tomlVal)
 			}
+			fieldVal = unwrapPtrs(fieldVal)
 			err := d.unmarshalPointer(fieldVal.Interface(), subtree)
 			if err != nil {
 				return err
