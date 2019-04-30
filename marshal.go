@@ -513,24 +513,288 @@ func (d *Decoder) SetTagName(v string) *Decoder {
 }
 
 func (d *Decoder) unmarshal(v interface{}) error {
-	mtype := reflect.TypeOf(v)
-	if mtype.Kind() != reflect.Ptr {
+	pval := reflect.ValueOf(v)
+	ptype := pval.Type()
+	if ptype.Kind() != reflect.Ptr {
 		return errors.New("only a pointer to struct or map can be unmarshaled from TOML")
 	}
 
-	elem := mtype.Elem()
+	if pval.IsNil() {
+		return errors.New("cannot unmarshal to a nil pointer")
+	}
 
-	switch elem.Kind() {
-	case reflect.Struct, reflect.Map:
+	etype := ptype.Elem()
+	switch etype.Kind() {
+	case reflect.Struct:
+		return d.unmarshalStruct(v, d.tval)
+	case reflect.Map:
+		return d.unmarshalMap(v, d.tval)
 	default:
 		return errors.New("only a pointer to struct or map can be unmarshaled from TOML")
 	}
+}
 
-	sval, err := d.valueFromTree(elem, d.tval)
-	if err != nil {
-		return err
+func (d *Decoder) unmarshalPointer(v interface{}, t *Tree) error {
+	ptype := reflect.TypeOf(v)
+	if ptype.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
 	}
-	reflect.ValueOf(v).Elem().Set(sval)
+
+	if reflect.ValueOf(v).IsNil() {
+		panic("unmarshalPoint expects a non-nil pointer")
+	}
+
+	switch ptype.Elem().Kind() {
+	case reflect.Struct:
+		return d.unmarshalStruct(v, t)
+	case reflect.Map:
+		return d.unmarshalMap(v, t)
+	default:
+		return errors.New("pointer type not supported by unmarshal")
+	}
+}
+
+// unmarshal given tree to a struct. assumes v is a pointer to a struct
+// If a field is not present in the TOML document but has a `default:""` tag attached to it, any provided value will be
+// overwritten by the provided default value
+func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
+	ptype := reflect.TypeOf(v)
+
+	// must be a ptr to be settable (read https://blog.golang.org/laws-of-reflection#TOC_8.)
+	if ptype.Kind() != reflect.Ptr {
+		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
+	}
+
+	// unwrap pointer
+	stype := ptype.Elem()
+	pval := reflect.ValueOf(v)
+	sval := pval.Elem()
+
+	// TODO: remove sanity check after refactoring
+	if stype.Kind() != reflect.Struct {
+		panic(fmt.Errorf("expected to unmsarshal struct, not %s", stype.Kind()))
+	}
+
+	// check if the pointer is nil
+	if pval.IsNil() {
+		panic("unmarshalStruct expects an already constructed struct")
+	}
+
+	// iterate over the fields of the struct and recurse to fill them with values
+	structFieldsNum := stype.NumField()
+	for fieldIdx := 0; fieldIdx < structFieldsNum; fieldIdx++ {
+		field := stype.Field(fieldIdx)
+		fieldOpts := tomlOptions(field, annotation{tag: d.tagName}) // toml-specific options on this field
+		if t == nil || !t.Has(field.Name) { // value not in the tree
+			// use default if exists
+			if fieldOpts.defaultValue != "" {
+				defaultValue, err := defaultValueForField(field.Type, fieldOpts.defaultValue)
+				if err != nil {
+					return err
+				}
+				sval.Field(fieldIdx).Set(reflect.ValueOf(defaultValue))
+				continue
+			}
+			// if the field is a struct, or a pointer to a struct, make sure to recurse into it anyway to go over the
+			// default tags
+		}
+		// field is contained in the tree
+		vfield := sval.Field(fieldIdx)
+		var val interface{}
+		// we need to figure out what kind of object we need to decode
+		switch field.Type.Kind() {
+		case reflect.Struct:
+			subtree, err := subtreeForStructField(t, field)
+			if err != nil {
+				return err
+			}
+			err = d.unmarshalStruct(vfield.Addr().Interface(), subtree)
+			if err != nil {
+				return err
+			}
+		case reflect.Map:
+			subtree, err := subtreeForStructField(t, field)
+			if err != nil {
+				return err
+			}
+			err = d.unmarshalMap(vfield.Addr().Interface(), subtree)
+			if err != nil {
+				return err
+			}
+			// TODO: arrays and slices
+		case reflect.Ptr: // Ptr to SOMETHING
+			// if the pointer is nil
+			if vfield.IsNil() {
+				// allocate whatever needs to be allocated before moving forward (unmarshalPointer expects a
+				// non-nil pointer)
+				vfield.Set(allocateValueForPointer(field.Type.Elem()))
+			}
+			subtree, err := subtreeForStructField(t, field)
+			if err != nil {
+				return err
+			}
+			err = d.unmarshalPointer(vfield.Interface(), subtree)
+			if err != nil {
+				return err
+			}
+		// all the default types
+		default: // hope for the best? TODO: check with custom type
+			// fill the value using whatever Tree returns.
+			if t != nil && t.Has(field.Name) {
+				val = t.Get(field.Name)
+				vfield.Set(reflect.ValueOf(val).Convert(field.Type))
+			}
+			continue
+		}
+	}
+	return nil
+}
+
+func subtreeForStructField(t *Tree, field reflect.StructField) (*Tree, error) {
+	if t == nil {
+		return nil, nil
+	}
+	if !t.Has(field.Name) {
+		return nil, nil
+	}
+	subtree := t.Get(field.Name)
+	st, ok := subtree.(*Tree)
+	if !ok {
+		return nil, fmt.Errorf("expected TOML group, got %T instead", subtree)
+	}
+	return st, nil
+}
+
+func allocateValueForPointer(valueType reflect.Type) reflect.Value {
+	if valueType.Kind() == reflect.Map {
+		return reflect.MakeMap(valueType)
+	}
+	return reflect.New(valueType)
+}
+
+func defaultValueForField(fieldType reflect.Type, defaultString string) (interface{}, error) {
+	switch fieldType.Kind() {
+	case reflect.Bool:
+		return strconv.ParseBool(defaultString)
+	case reflect.Int:
+		return strconv.Atoi(defaultString)
+	case reflect.String:
+		return defaultString, nil
+	case reflect.Int64:
+		return strconv.ParseInt(defaultString, 10, 64)
+	case reflect.Float64:
+		return strconv.ParseFloat(defaultString, 64)
+	default:
+		return nil, fmt.Errorf("unsuported field type for default option")
+	}
+}
+
+// unmarshal given tree to a map. assumes v is a pointer to a map
+func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
+	mval := reflect.ValueOf(v)
+	mtype := mval.Type()
+
+	if mval.Kind() == reflect.Ptr {
+		if mval.IsNil() {
+			panic("unmarshalMap expects a non-nil pointer")
+		}
+		// unwrap pointer
+		mval = mval.Elem()
+		mtype = mval.Type()
+	}
+
+	if mtype.Kind() != reflect.Map {
+		panic("unmarshalMap expects a pointer to a map")
+	}
+
+	if mtype.Key().Kind() != reflect.String {
+		return fmt.Errorf("can only unmarshal to map with string keys, not %s", mtype.Key().Kind())
+	}
+
+	if mval.IsNil() {
+		mval.Set(reflect.MakeMap(mtype))
+	}
+
+	ktype := mtype.Key()
+	vtype := mtype.Elem()
+
+	// go over all keys at the root of the tree and unmarshal them based on the type of the map's values
+	for key, tomlVal := range t.values { // note: use t.values instead of t.Keys() to avoid unnecessary array creation
+		fmt.Println("LOOKING AT KEY", key)
+		vkey := reflect.ValueOf(key).Convert(ktype)
+		fieldVal := mval.MapIndex(vkey)
+		fieldType := vtype
+
+		if fieldVal.IsValid() {
+			fieldType = fieldVal.Type()
+		}
+
+		fmt.Println("KIND=", fieldType.Kind())
+		switch fieldType.Kind() {
+		case reflect.Struct:
+			// if the key does not exist in the map yet, allocate it
+			if !fieldVal.IsValid() {
+				newVal := allocateValueForPointer(vtype)
+				mval.SetMapIndex(vkey, newVal)
+				fieldVal = mval.MapIndex(vkey) // TODO: assign newVal directly to fieldVal
+			}
+
+			subtree, ok := tomlVal.(*Tree)
+			if !ok {
+				return fmt.Errorf("expected TOML group, got %T", tomlVal)
+			}
+			err := d.unmarshalStruct(fieldVal.Addr().Interface(), subtree)
+			if err != nil {
+				return err
+			}
+		case reflect.Map:
+			// if the key does not exist in the map yet, allocate it
+			if !fieldVal.IsValid() {
+				newVal := allocateValueForPointer(vtype)
+				mval.SetMapIndex(vkey, newVal)
+				fieldVal = mval.MapIndex(vkey) // TODO: assign newVal directly to fieldVal
+			}
+
+			subtree, ok := tomlVal.(*Tree)
+			if !ok {
+				return fmt.Errorf("expected TOML group, got %T", tomlVal)
+			}
+			err := d.unmarshalMap(fieldVal.Interface(), subtree)
+			if err != nil {
+				return err
+			}
+			// TODO: arrays and slices
+		case reflect.Ptr: // Ptr to SOMETHING
+			// if the pointer is nil
+			if !fieldVal.IsValid() {
+				newVal := allocateValueForPointer(vtype)
+				mval.SetMapIndex(vkey, newVal)
+				fieldVal = mval.MapIndex(vkey) // TODO: assign newVal directly to fieldVal
+			}
+			subtree, ok := tomlVal.(*Tree)
+			if !ok {
+				return fmt.Errorf("expected TOML group, got %T", tomlVal)
+			}
+			err := d.unmarshalPointer(fieldVal.Interface(), subtree)
+			if err != nil {
+				return err
+			}
+		case reflect.Interface:
+			// Because the unmarshal target is an interface, we need to drive the reflection from the TOML tree from
+			// now on
+			// TODO continue
+		// all the default types
+		default: // hope for the best? TODO: check with custom type
+			// fill the value using whatever Tree returns.
+			v, ok := tomlVal.(*tomlValue)
+			if !ok {
+				return fmt.Errorf("expected toml key, got %T", tomlVal)
+			}
+			mval.SetMapIndex(vkey, reflect.ValueOf(v.value).Convert(fieldType))
+			continue
+		}
+
+	}
 	return nil
 }
 
