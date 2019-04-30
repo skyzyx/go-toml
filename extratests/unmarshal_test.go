@@ -284,3 +284,52 @@ bcb = "two"
 		t.Errorf("Bad unmarshal: expected %v, got %v", expected, v)
 	}
 }
+
+func TestUnmarshalArrayInMap(t *testing.T) {
+	m := map[string]interface{}{}
+	data := []byte(`
+[hello]
+world = [1,2,3]`)
+	err := toml.Unmarshal(data, &m)
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	expected := map[string]interface{}{
+		"hello": map[string]interface{}{
+			"world": []interface{}{int64(1),int64(2),int64(3)},
+		},
+	}
+	if !reflect.DeepEqual(m, expected) {
+		t.Errorf("Bad unmarshal: expected\n%v\ngot\n%v", expected, m)
+	}
+}
+
+func TestUnmarshalArrayInMapRoot(t *testing.T) {
+	m := map[string]interface{}{}
+	data := []byte(`world = [1,2,3]`)
+	err := toml.Unmarshal(data, &m)
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	expected := map[string]interface{}{
+		"world": []interface{}{int64(1),int64(2),int64(3)},
+	}
+	if !reflect.DeepEqual(m, expected) {
+		t.Errorf("Bad unmarshal: expected\n%v\ngot\n%v", expected, m)
+	}
+}
+
+func TestUnmarshalStructArray(t *testing.T) {
+	type S struct{
+		Ints []int64
+	}
+	s := S{}
+	data := []byte(`Ints = [1,2,3]`)
+	err := toml.Unmarshal(data, &s)
+	if err != nil {
+		t.Fatal("unexpected error", err)
+	}
+	if len(s.Ints) != 3 {
+		t.Fatal("Ints is supposed to have 3 elements, not", len(s.Ints))
+	}
+}

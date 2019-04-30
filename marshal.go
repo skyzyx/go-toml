@@ -534,7 +534,7 @@ func (d *Decoder) unmarshal(v interface{}) error {
 	}
 }
 
-func (d *Decoder) unmarshalPointer(v interface{}, t *Tree) error {
+func (d *Decoder) unmarshalPointer(v interface{}, treeElem interface{}) error {
 	ptype := reflect.TypeOf(v)
 	if ptype.Kind() != reflect.Ptr {
 		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
@@ -546,11 +546,12 @@ func (d *Decoder) unmarshalPointer(v interface{}, t *Tree) error {
 
 	switch ptype.Elem().Kind() {
 	case reflect.Struct:
-		return d.unmarshalStruct(v, t)
+		return d.unmarshalStruct(v, treeElem.(*Tree))
 	case reflect.Map:
-		return d.unmarshalMap(v, t)
+		return d.unmarshalMap(v, treeElem.(*Tree))
 	default:
-		return errors.New("pointer type not supported by unmarshal")
+		reflect.ValueOf(v).Elem().Set(reflect.ValueOf(treeElem).Convert(ptype.Elem()))
+		return nil
 	}
 }
 
@@ -621,7 +622,31 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 			if err != nil {
 				return err
 			}
-			// TODO: arrays and slices
+		case reflect.Slice:
+			if t == nil || !t.Has(field.Name) {
+				// nothing in the tree, create an empty slice
+				newSlice := reflect.MakeSlice(field.Type.Elem(), 0, 0)
+				vfield.Set(newSlice)
+			} else {
+				data := t.Get(field.Name)
+				dval := reflect.ValueOf(data)
+
+				if dval.Kind() != reflect.Slice {
+					return fmt.Errorf("expected TOML slice, got %T", dval)
+				}
+
+				newSlice := reflect.MakeSlice(field.Type, dval.Len(), dval.Cap())
+				vfield.Set(newSlice)
+
+				for i := 0; i < dval.Len(); i++ {
+					targetPtr := newSlice.Index(i).Addr().Interface()
+					dataElem := dval.Index(i).Interface()
+					err := d.unmarshalPointer(targetPtr, dataElem)
+					if err != nil {
+						return err
+					}
+				}
+			}
 		case reflect.Ptr: // Ptr to SOMETHING
 			// if the pointer is nil
 			if vfield.IsNil() {
