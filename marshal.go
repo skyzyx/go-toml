@@ -780,10 +780,20 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 				return err
 			}
 		case reflect.Interface:
-			// Because the unmarshal target is an interface, we need to drive the reflection from the TOML tree from
-			// now on
-			// TODO continue
-		// all the default types
+			// Because the unmarshal target is an interface, we need to drive the
+			// reflection from the TOML tree from now on
+			var valueToInsert interface{}
+			switch t := tomlVal.(type) {
+			case *Tree:
+				valueToInsert = t.ToMap()
+			case *tomlValue:
+				valueToInsert = t.value
+			// TODO: arrays
+			default:
+				panic(fmt.Errorf("don't know what to do with this %T", t))
+			}
+			mval.SetMapIndex(vkey, reflect.ValueOf(valueToInsert))
+			// all the default types
 		default: // hope for the best? TODO: check with custom type
 			// fill the value using whatever Tree returns.
 			v, ok := tomlVal.(*tomlValue)

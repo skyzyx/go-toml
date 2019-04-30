@@ -270,11 +270,11 @@ bcb = "two"
 	}
 	expected := map[string]map[string]interface{}{
 		"a": {
-			"aa": 1,
+			"aa": int64(1),
 		},
 		"b": {
 			"c": map[string]interface{}{
-				"bca": 1,
+				"bca": int64(1),
 				"bcb": "two",
 			},
 		},
