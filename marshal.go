@@ -626,11 +626,11 @@ func (d *Decoder) unmarshalBasicValue(pval reflect.Value, treeElem interface{}) 
 func convertAllowedTypes(vfrom reflect.Value, targetType reflect.Type) (reflect.Value, error) {
 	fromKind := vfrom.Kind()
 	toKind := targetType.Kind()
-	if fromKind == toKind {
-		return vfrom, nil
-	}
 
 	switch toKind {
+	case reflect.Slice:
+		// TODO continue
+		return d.valueFromOtherSlice(mtype, t)
 	case reflect.Bool, reflect.Struct:
 		if !vfrom.Type().ConvertibleTo(targetType) {
 			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
