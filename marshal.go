@@ -512,23 +512,30 @@ func (d *Decoder) SetTagName(v string) *Decoder {
 	return d
 }
 
+// unmarshal is the entry point
+// It expects a pointer to a struct or a map, already initialized.
+//
+// The rules for all unmarshal* functions is that they expect to receive a direct pointer to an initialized object.
+// It is up to the caller to figure out initialization and following nested pointer types.
+// Read https://blog.golang.org/laws-of-reflection#TOC_8.
 func (d *Decoder) unmarshal(v interface{}) error {
 	pval := reflect.ValueOf(v)
 	ptype := pval.Type()
 	if ptype.Kind() != reflect.Ptr {
 		return errors.New("only a pointer to struct or map can be unmarshaled from TOML")
 	}
-
+	if ptype.Elem().Kind() == reflect.Ptr {
+		return errors.New("unmarshal expects a direct pointer to a struct or a map")
+	}
 	if pval.IsNil() {
-		return errors.New("cannot unmarshal to a nil pointer")
+		return errors.New("unmarshal expects a non-nil pointer")
 	}
 
-	etype := ptype.Elem()
-	switch etype.Kind() {
+	switch ptype.Elem().Kind() {
 	case reflect.Struct:
-		return d.unmarshalStruct(v, d.tval)
+		return d.unmarshalStruct(pval, d.tval)
 	case reflect.Map:
-		return d.unmarshalMap(v, d.tval)
+		return d.unmarshalMap(pval, d.tval)
 	default:
 		return errors.New("only a pointer to struct or map can be unmarshaled from TOML")
 	}
@@ -542,40 +549,48 @@ func unwrapPtrs(ptr reflect.Value) reflect.Value {
 	return ptr
 }
 
-func (d *Decoder) unmarshalPointer(v interface{}, treeElem interface{}) error {
-	ptype := reflect.TypeOf(v)
+func (d *Decoder) unmarshalPointer(pval reflect.Value, treeElem interface{}) error {
+	ptype := pval.Type()
 	if ptype.Kind() != reflect.Ptr {
 		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
 	}
 	if ptype.Elem().Kind() == reflect.Ptr {
 		panic(fmt.Errorf("expected ptr to non-pointer, got pointer to %s", ptype.Elem().Kind()))
 	}
-	if reflect.ValueOf(v).IsNil() {
+	if pval.IsNil() {
 		panic("unmarshalPointer expects a non-nil pointer")
 	}
 
 	switch ptype.Elem().Kind() {
 	case reflect.Struct:
 		// That looks like a slippery slope
-		if _, ok := treeElem.(time.Time); ok {
-			return d.unmarshalBasicValue(v, treeElem)
+		if pval.Type().Elem().ConvertibleTo(timeType) {
+			return d.unmarshalBasicValue(pval, treeElem)
 		}
-		return d.unmarshalStruct(v, treeElem.(*Tree))
+		var t *Tree
+		if treeElem != nil {
+			t = treeElem.(*Tree)
+		}
+		return d.unmarshalStruct(pval, t)
 	case reflect.Map:
-		return d.unmarshalMap(v, treeElem.(*Tree))
+		var t *Tree
+		if treeElem != nil {
+			t = treeElem.(*Tree)
+		}
+		return d.unmarshalMap(pval, t)
 	default:
-		return d.unmarshalBasicValue(v, treeElem)
+		return d.unmarshalBasicValue(pval, treeElem)
 	}
 }
 
-func (d *Decoder) unmarshalBasicValue(v interface{}, treeElem interface{}) error {
-	ptype := reflect.TypeOf(v)
+func (d *Decoder) unmarshalBasicValue(pval reflect.Value, treeElem interface{}) error {
+	ptype := pval.Type()
 
 	if ptype.Kind() != reflect.Ptr {
 		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
 	}
 
-	if reflect.ValueOf(v).IsNil() {
+	if pval.IsNil() {
 		panic("unmarshalBasicValue expects a non-nil pointer")
 	}
 
@@ -586,39 +601,116 @@ func (d *Decoder) unmarshalBasicValue(v interface{}, treeElem interface{}) error
 		newRawValue := reflect.New(ptype.Elem().Elem())
 		newRawValue.Elem().Set(rawValue.Convert(ptype.Elem().Elem()))
 		rawValue = newRawValue // wrap into pointer if necessary
+		panic("AHOY!")
 	} else {
-		rawValue = rawValue.Convert(ptype.Elem())
+
+	}
+	//rawValue = rawValue.Convert(ptype.Elem()) //was in the else
+
+	finalValue := rawValue
+
+	// try to perform okay type conversions if needs be
+	if !finalValue.Type().AssignableTo(ptype.Elem()) {
+		v, err := convertAllowedTypes(rawValue, ptype.Elem())
+		if err != nil {
+			return err
+		}
+		finalValue = v
 	}
 
-	reflect.ValueOf(v).Elem().Set(rawValue)
+	pval.Elem().Set(finalValue)
 	return nil
 }
 
-// unmarshal given tree to a struct. assumes v is a pointer to a struct
+
+func convertAllowedTypes(vfrom reflect.Value, targetType reflect.Type) (reflect.Value, error) {
+	fromKind := vfrom.Kind()
+	toKind := targetType.Kind()
+	if fromKind == toKind {
+		return vfrom, nil
+	}
+
+	switch toKind {
+	case reflect.Bool, reflect.Struct:
+		if !vfrom.Type().ConvertibleTo(targetType) {
+			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
+		}
+		return vfrom.Convert(targetType), nil
+	case reflect.String:
+		// stupidly, int64 is convertible to string. So special case this.
+		if !vfrom.Type().ConvertibleTo(targetType) || vfrom.Kind() == reflect.Int64 {
+			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
+		}
+		return vfrom.Convert(targetType), nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		// special case for durations, which masquerade as int64
+		if targetType == reflect.TypeOf(time.Duration(1)) &&  fromKind == reflect.String {
+			d, err := time.ParseDuration(vfrom.String())
+			if err != nil {
+				return vfrom, fmt.Errorf("cannot parse time.Duration from %s", vfrom)
+			}
+			return reflect.ValueOf(d), nil
+		}
+		if !vfrom.Type().ConvertibleTo(targetType) {
+			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
+		}
+		res := vfrom.Convert(targetType)
+		if reflect.Indirect(reflect.New(targetType)).OverflowInt(res.Int()) {
+			return vfrom, fmt.Errorf("%v (%T) would overflow %v", vfrom, vfrom, targetType)
+		}
+		return res, nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		if !vfrom.Type().ConvertibleTo(targetType) {
+			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
+		}
+		if vfrom.Convert(reflect.TypeOf(int(1))).Int() < 0 {
+			return vfrom, fmt.Errorf("%v (%T) is negative so does not fit in %v", vfrom, vfrom, toKind)
+		}
+
+		res := vfrom.Convert(targetType)
+		if reflect.Indirect(reflect.New(targetType)).OverflowUint(uint64(res.Uint())) {
+			return vfrom, fmt.Errorf("%v (%T) would overflow %v", vfrom, vfrom, targetType)
+		}
+		return res, nil
+	case reflect.Float32, reflect.Float64:
+		if !vfrom.Type().ConvertibleTo(targetType) {
+			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
+		}
+
+		res := vfrom.Convert(targetType)
+		if reflect.Indirect(reflect.New(targetType)).OverflowFloat(res.Float()) {
+			return vfrom, fmt.Errorf("%v (%T) would overflow %v", vfrom, vfrom, targetType)
+		}
+		return res, nil
+	}
+
+	return vfrom, fmt.Errorf("convertion from %s to %s not allowed", fromKind, toKind)
+}
+
+// unmarshal given tree to a struct.
+//
+// Assumes pval is a direct pointer to an initialized struct.
+//
 // If a field is not present in the TOML document but has a `default:""` tag attached to it, any provided value will be
 // overwritten by the provided default value
-func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
-	ptype := reflect.TypeOf(v)
+func (d *Decoder) unmarshalStruct(pval reflect.Value, t *Tree) error {
+	ptype := pval.Type()
 
-	// must be a ptr to be settable (read https://blog.golang.org/laws-of-reflection#TOC_8.)
+	// validate assumptions
+	// FIXME: remove when refactoring done
 	if ptype.Kind() != reflect.Ptr {
 		panic(fmt.Errorf("expected ptr, got %s", ptype.Kind()))
+	}
+	if ptype.Elem().Kind() != reflect.Struct {
+		panic(fmt.Errorf("expected pointer to Struct, got pointer to %s instead", ptype.Elem().Kind()))
+	}
+	if pval.IsNil() {
+		panic(fmt.Errorf("expected non-nil pointer"))
 	}
 
 	// unwrap pointer
 	stype := ptype.Elem()
-	pval := reflect.ValueOf(v)
 	sval := pval.Elem()
-
-	// TODO: remove sanity check after refactoring
-	if stype.Kind() != reflect.Struct {
-		panic(fmt.Errorf("expected to unmsarshal struct, not %s", stype.Kind()))
-	}
-
-	// check if the pointer is nil
-	if pval.IsNil() {
-		panic("unmarshalStruct expects an already constructed struct")
-	}
 
 	// iterate over the fields of the struct and recurse to fill them with values
 	structFieldsNum := stype.NumField()
@@ -626,6 +718,12 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 		field := stype.Field(fieldIdx)
 		fieldOpts := tomlOptions(field, annotation{tag: d.tagName}) // toml-specific options on this field
 
+		// skip the field if it should be be included (e.g. not exported, explicitely excluded)
+		if !fieldOpts.include {
+			continue
+		}
+
+		// iterate through all possible matching keys in the TOML document
 		baseKey := fieldOpts.name
 		keysToTry := []string{
 			baseKey,
@@ -659,17 +757,30 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 			// if the field is a struct, or a pointer to a struct, make sure to recurse into it anyway to go over the
 			// default tags
 		}
+
 		// field is contained in the tree
 		vfield := sval.Field(fieldIdx)
 		var val interface{}
 		// we need to figure out what kind of object we need to decode
 		switch field.Type.Kind() {
 		case reflect.Struct:
+			if field.Type.ConvertibleTo(timeType) {
+				// FIXME copy/paste from Default
+				// fill the value using whatever Tree returns.
+				if found {
+					val = t.Get(keyName)
+					rval := reflect.ValueOf(val)
+					if !rval.Type().ConvertibleTo(field.Type) {
+						return fmt.Errorf("value of type %s cannot be converted to type %s", rval.Type(), field.Type)
+					}
+				}
+				continue
+			}
 			subtree, err := subtreeForStructField(t, keyName)
 			if err != nil {
 				return err
 			}
-			err = d.unmarshalStruct(vfield.Addr().Interface(), subtree)
+			err = d.unmarshalStruct(vfield.Addr(), subtree)
 			if err != nil {
 				return err
 			}
@@ -678,7 +789,7 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 			if err != nil {
 				return err
 			}
-			err = d.unmarshalMap(vfield.Addr().Interface(), subtree)
+			err = d.unmarshalMap(vfield.Addr(), subtree)
 			if err != nil {
 				return err
 			}
@@ -687,24 +798,34 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				// nothing in the tree, create an empty slice
 				newSlice := reflect.MakeSlice(field.Type, 0, 0)
 				vfield.Set(newSlice)
-			} else {
-				data := t.Get(keyName)
-				dval := reflect.ValueOf(data)
+				continue
+			}
 
-				if dval.Kind() != reflect.Slice {
-					return fmt.Errorf("expected TOML slice, got %T", dval)
+			data := t.Get(keyName)
+			dval := reflect.ValueOf(data)
+
+			if dval.Kind() != reflect.Slice {
+				return fmt.Errorf("expected TOML slice, got %T", dval)
+			}
+
+			newSlice := reflect.MakeSlice(field.Type, dval.Len(), dval.Cap())
+			vfield.Set(newSlice)
+
+			for i := 0; i < dval.Len(); i++ {
+				sliceElemPtr := newSlice.Index(i).Addr()
+				targetPtr := unwrapPtrs(sliceElemPtr)
+				// at that point, targetPtr represents a pointer to an interface{}, potentially uninitialized
+				initializedPtr := ensureInitializedPointer(targetPtr)
+				// if the initialized pointer changed, and it's the one in the slice, make sure to update the reference
+				// in the slice
+				if initializedPtr != sliceElemPtr {
+					newSlice.Index(i).Set(initializedPtr)
 				}
-
-				newSlice := reflect.MakeSlice(field.Type, dval.Len(), dval.Cap())
-				vfield.Set(newSlice)
-
-				for i := 0; i < dval.Len(); i++ {
-					targetPtr := unwrapPtrs(newSlice.Index(i).Addr()).Interface()
-					dataElem := dval.Index(i).Interface()
-					err := d.unmarshalPointer(targetPtr, dataElem)
-					if err != nil {
-						return err
-					}
+				// now we should be good to go!
+				dataElem := dval.Index(i).Interface()
+				err := d.unmarshalPointer(initializedPtr, dataElem)
+				if err != nil {
+					return err
 				}
 			}
 		case reflect.Ptr: // Ptr to SOMETHING
@@ -714,11 +835,8 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 				// non-nil pointer)
 				vfield.Set(allocateValueForPointer(field.Type.Elem()))
 			}
-			subtree, err := subtreeForStructField(t, keyName)
-			if err != nil {
-				return err
-			}
-			err = d.unmarshalPointer(vfield.Interface(), subtree)
+			treeElem := treeElemForStructField(t, keyName)
+			err := d.unmarshalPointer(vfield, treeElem)
 			if err != nil {
 				return err
 			}
@@ -727,21 +845,33 @@ func (d *Decoder) unmarshalStruct(v interface{}, t *Tree) error {
 			// fill the value using whatever Tree returns.
 			if found {
 				val = t.Get(keyName)
-				vfield.Set(reflect.ValueOf(val).Convert(field.Type))
+				finalValue, err := safeTypeConvert(reflect.ValueOf(val), field.Type)
+				if err != nil {
+					return err
+				}
+				vfield.Set(finalValue)
 			}
 		}
 	}
 	return nil
 }
 
-func subtreeForStructField(t *Tree, fieldName string) (*Tree, error) {
+
+func treeElemForStructField(t *Tree, fieldName string) interface{} {
 	if t == nil {
-		return nil, nil
+		return nil
 	}
 	if !t.Has(fieldName) {
+		return nil
+	}
+	return t.Get(fieldName)
+}
+
+func subtreeForStructField(t *Tree, fieldName string) (*Tree, error) {
+	subtree := treeElemForStructField(t, fieldName)
+	if subtree == nil {
 		return nil, nil
 	}
-	subtree := t.Get(fieldName)
 	st, ok := subtree.(*Tree)
 	if !ok {
 		return nil, fmt.Errorf("expected TOML group, got %T instead", subtree)
@@ -754,6 +884,20 @@ func allocateValueForPointer(valueType reflect.Type) reflect.Value {
 		return reflect.MakeMap(valueType)
 	}
 	return reflect.New(valueType)
+}
+
+func ensureInitializedPointer(pval reflect.Value) reflect.Value {
+	ptype := pval.Type()
+	if ptype.Kind() != reflect.Ptr {
+		panic("ensureInitializedPointer expects pointer to something")
+	}
+	if ptype.Elem().Kind() == reflect.Ptr {
+		panic("ensureInitializedPointer expects pointer to non-pointer")
+	}
+	if !pval.IsNil() {
+		return pval
+	}
+	return allocateValueForPointer(ptype.Elem())
 }
 
 func defaultValueForField(fieldType reflect.Type, defaultString string) (interface{}, error) {
@@ -774,8 +918,8 @@ func defaultValueForField(fieldType reflect.Type, defaultString string) (interfa
 }
 
 // unmarshal given tree to a map. assumes v is a pointer to a map
-func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
-	mval := reflect.ValueOf(v)
+// FIXME mval may or may not be a pointer to a string. VERIFY
+func (d *Decoder) unmarshalMap(mval reflect.Value, t *Tree) error {
 	mtype := mval.Type()
 
 	if mval.Kind() == reflect.Ptr {
@@ -825,7 +969,7 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 			if !ok {
 				return fmt.Errorf("expected TOML group, got %T", tomlVal)
 			}
-			err := d.unmarshalStruct(fieldVal.Addr().Interface(), subtree)
+			err := d.unmarshalStruct(fieldVal.Addr(), subtree)
 			if err != nil {
 				return err
 			}
@@ -841,7 +985,7 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 			if !ok {
 				return fmt.Errorf("expected TOML group, got %T", tomlVal)
 			}
-			err := d.unmarshalMap(fieldVal.Interface(), subtree)
+			err := d.unmarshalMap(fieldVal, subtree)
 			if err != nil {
 				return err
 			}
@@ -858,7 +1002,7 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 				return fmt.Errorf("expected TOML group, got %T", tomlVal)
 			}
 			fieldVal = unwrapPtrs(fieldVal)
-			err := d.unmarshalPointer(fieldVal.Interface(), subtree)
+			err := d.unmarshalPointer(fieldVal, subtree)
 			if err != nil {
 				return err
 			}
@@ -883,12 +1027,23 @@ func (d *Decoder) unmarshalMap(v interface{}, t *Tree) error {
 			if !ok {
 				return fmt.Errorf("expected toml key, got %T", tomlVal)
 			}
-			mval.SetMapIndex(vkey, reflect.ValueOf(v.value).Convert(fieldType))
+			finalValue, err := safeTypeConvert(reflect.ValueOf(v.value), fieldType)
+			if err != nil {
+				return err
+			}
+			mval.SetMapIndex(vkey, finalValue)
 			continue
 		}
 
 	}
 	return nil
+}
+
+func safeTypeConvert(val reflect.Value, targetType reflect.Type) (reflect.Value, error) {
+	if !val.Type().ConvertibleTo(targetType) {
+		return val, fmt.Errorf("value of type %s cannot be converted to type %s", val.Type(), targetType)
+	}
+	return val.Convert(targetType), nil
 }
 
 // Convert toml tree to marshal struct or map, using marshal type
