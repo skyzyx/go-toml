@@ -578,9 +578,22 @@ func (d *Decoder) unmarshalPointer(pval reflect.Value, treeElem interface{}) err
 			t = treeElem.(*Tree)
 		}
 		return d.unmarshalMap(pval, t)
+	case reflect.Slice:
+		var ts []interface{}
+		if treeElem != nil {
+			ts = treeElem.([]interface{})
+		}
+		return d.unmarshalSlice(pval, ts)
 	default:
 		return d.unmarshalBasicValue(pval, treeElem)
 	}
+}
+
+func (d *Decoder) unmarshalSlice(pva reflect.Value, treeSlice []interface{}) error {
+	// treeSlice can be either a []*Tree, or a slice of any TOML basic types
+	panic("not implemented yet")
+
+	return nil
 }
 
 func (d *Decoder) unmarshalBasicValue(pval reflect.Value, treeElem interface{}) error {
@@ -629,8 +642,19 @@ func convertAllowedTypes(vfrom reflect.Value, targetType reflect.Type) (reflect.
 
 	switch toKind {
 	case reflect.Slice:
-		// TODO continue
-		return d.valueFromOtherSlice(mtype, t)
+		// need to convert a []interface{} (from the Tree) to targetType ([]something)
+		newSlice := reflect.MakeSlice(targetType, vfrom.Len(), vfrom.Cap())
+
+		for i := 0; i < vfrom.Len(); i++ {
+			velem := vfrom.Index(i)
+			convertedElem, err := convertAllowedTypes(velem, targetType.Elem())
+			if err != nil {
+				return vfrom, nil
+			}
+			velem.Set(convertedElem)
+		}
+
+		return newSlice, nil
 	case reflect.Bool, reflect.Struct:
 		if !vfrom.Type().ConvertibleTo(targetType) {
 			return vfrom, fmt.Errorf("cannot convert %v (%T) to %s", vfrom, vfrom, toKind)
