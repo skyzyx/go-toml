@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/pelletier/go-toml"
+	"github.com/skyzyx/go-toml"
 )
 
 // Define tokens

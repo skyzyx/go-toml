@@ -1,4 +1,4 @@
-**Issue:** add link to pelletier/go-toml issue here
+**Issue:** add link to skyzyx/go-toml issue here
 
 Explanation of what this pull request does.
 

@@ -1,5 +1,5 @@
-module github.com/pelletier/go-toml
+module github.com/skyzyx/go-toml
 
-go 1.12
+go 1.14
 
 require github.com/davecgh/go-spew v1.1.1

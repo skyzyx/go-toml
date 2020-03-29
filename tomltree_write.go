@@ -307,10 +307,10 @@ func sortAlphabetical(t *Tree) (vals []sortNode) {
 }
 
 func (t *Tree) writeTo(w io.Writer, indent, keyspace string, bytesCount int64, arraysOneElementPerLine bool) (int64, error) {
-	return t.writeToOrdered(w, indent, keyspace, bytesCount, arraysOneElementPerLine, OrderAlphabetical, "  ", false)
+	return t.WriteToOrdered(w, indent, keyspace, bytesCount, arraysOneElementPerLine, OrderAlphabetical, "  ", false)
 }
 
-func (t *Tree) writeToOrdered(w io.Writer, indent, keyspace string, bytesCount int64, arraysOneElementPerLine bool, ord marshalOrder, indentString string, parentCommented bool) (int64, error) {
+func (t *Tree) WriteToOrdered(w io.Writer, indent, keyspace string, bytesCount int64, arraysOneElementPerLine bool, ord marshalOrder, indentString string, parentCommented bool) (int64, error) {
 	var orderedVals []sortNode
 
 	switch ord {
@@ -360,7 +360,7 @@ func (t *Tree) writeToOrdered(w io.Writer, indent, keyspace string, bytesCount i
 				if err != nil {
 					return bytesCount, err
 				}
-				bytesCount, err = node.writeToOrdered(w, indent+indentString, combinedKey, bytesCount, arraysOneElementPerLine, ord, indentString, parentCommented || t.commented || tv.commented)
+				bytesCount, err = node.WriteToOrdered(w, indent+indentString, combinedKey, bytesCount, arraysOneElementPerLine, ord, indentString, parentCommented || t.commented || tv.commented)
 				if err != nil {
 					return bytesCount, err
 				}
@@ -376,7 +376,7 @@ func (t *Tree) writeToOrdered(w io.Writer, indent, keyspace string, bytesCount i
 						return bytesCount, err
 					}
 
-					bytesCount, err = subTree.writeToOrdered(w, indent+indentString, combinedKey, bytesCount, arraysOneElementPerLine, ord, indentString, parentCommented || t.commented || subTree.commented)
+					bytesCount, err = subTree.WriteToOrdered(w, indent+indentString, combinedKey, bytesCount, arraysOneElementPerLine, ord, indentString, parentCommented || t.commented || subTree.commented)
 					if err != nil {
 						return bytesCount, err
 					}

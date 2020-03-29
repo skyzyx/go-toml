@@ -1,5 +1,7 @@
-FROM golang:1.12-alpine3.9 as builder
-WORKDIR /go/src/github.com/pelletier/go-toml
+FROM golang:1.14-alpine3.11 as builder
+
+WORKDIR /go/src/github.com/skyzyx/go-toml
+
 COPY . .
 ENV CGO_ENABLED=0
 ENV GOOS=linux

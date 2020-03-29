@@ -403,7 +403,7 @@ func (e *Encoder) marshal(v interface{}) ([]byte, error) {
 	}
 
 	var buf bytes.Buffer
-	_, err = t.writeToOrdered(&buf, "", "", 0, e.arraysOneElementPerLine, e.order, e.indentation, false)
+	_, err = t.WriteToOrdered(&buf, "", "", 0, e.arraysOneElementPerLine, e.order, e.indentation, false)
 
 	return buf.Bytes(), err
 }

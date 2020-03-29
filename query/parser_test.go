@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pelletier/go-toml"
+	"github.com/skyzyx/go-toml"
 )
 
 type queryTestNode struct {
