@@ -5,11 +5,11 @@ Go library for the [TOML](https://github.com/mojombo/toml) format.
 This library supports TOML version
 [v0.5.0](https://github.com/toml-lang/toml/blob/master/versions/en/toml-v0.5.0.md)
 
-[![GoDoc](https://godoc.org/github.com/pelletier/go-toml?status.svg)](http://godoc.org/github.com/pelletier/go-toml)
-[![license](https://img.shields.io/github/license/pelletier/go-toml.svg)](https://github.com/pelletier/go-toml/blob/master/LICENSE)
+[![GoDoc](https://godoc.org/github.com/skyzyx/go-toml?status.svg)](http://godoc.org/github.com/skyzyx/go-toml)
+[![license](https://img.shields.io/github/license/skyzyx/go-toml.svg)](https://github.com/skyzyx/go-toml/blob/master/LICENSE)
 [![Build Status](https://dev.azure.com/pelletierthomas/go-toml-ci/_apis/build/status/pelletier.go-toml?branchName=master)](https://dev.azure.com/pelletierthomas/go-toml-ci/_build/latest?definitionId=1&branchName=master)
-[![codecov](https://codecov.io/gh/pelletier/go-toml/branch/master/graph/badge.svg)](https://codecov.io/gh/pelletier/go-toml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/pelletier/go-toml)](https://goreportcard.com/report/github.com/pelletier/go-toml)
+[![codecov](https://codecov.io/gh/skyzyx/go-toml/branch/master/graph/badge.svg)](https://codecov.io/gh/skyzyx/go-toml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/skyzyx/go-toml)](https://goreportcard.com/report/github.com/skyzyx/go-toml)
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpelletier%2Fgo-toml.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpelletier%2Fgo-toml?ref=badge_shield)
 
 ## Features
@@ -26,7 +26,7 @@ Go-toml provides the following features for using data parsed from TOML document
 ## Import
 
 ```go
-import "github.com/pelletier/go-toml"
+import "github.com/skyzyx/go-toml"
 ```
 
 ## Usage example
@@ -81,7 +81,7 @@ for ii, item := range results.Values() {
 ## Documentation
 
 The documentation and additional examples are available at
-[godoc.org](http://godoc.org/github.com/pelletier/go-toml).
+[godoc.org](http://godoc.org/github.com/skyzyx/go-toml).
 
 ## Tools
 
@@ -90,31 +90,31 @@ Go-toml provides two handy command line tools:
 * `tomll`: Reads TOML files and lint them.
 
     ```
-    go install github.com/pelletier/go-toml/cmd/tomll
+    go install github.com/skyzyx/go-toml/cmd/tomll
     tomll --help
     ```
 * `tomljson`: Reads a TOML file and outputs its JSON representation.
 
     ```
-    go install github.com/pelletier/go-toml/cmd/tomljson
+    go install github.com/skyzyx/go-toml/cmd/tomljson
     tomljson --help
     ```
   
  * `jsontoml`: Reads a JSON file and outputs a TOML representation.
  
     ```
-    go install github.com/pelletier/go-toml/cmd/jsontoml
+    go install github.com/skyzyx/go-toml/cmd/jsontoml
     jsontoml --help
     ```
 
 ### Docker image
 
 Those tools are also availble as a Docker image from
-[dockerhub](https://hub.docker.com/r/pelletier/go-toml). For example, to
+[dockerhub](https://hub.docker.com/r/skyzyx/go-toml). For example, to
 use `tomljson`:
 
 ```
-docker run -v $PWD:/workdir pelletier/go-toml tomljson /workdir/example.toml
+docker run -v $PWD:/workdir skyzyx/go-toml tomljson /workdir/example.toml
 ```
 
 Only master (`latest`) and tagged versions are published to dockerhub. You
@@ -127,7 +127,7 @@ docker build -t go-toml .
 ## Contribute
 
 Feel free to report bugs and patches using GitHub's pull requests system on
-[pelletier/go-toml](https://github.com/pelletier/go-toml). Any feedback would be
+[skyzyx/go-toml](https://github.com/skyzyx/go-toml). Any feedback would be
 much appreciated!
 
 ### Run tests

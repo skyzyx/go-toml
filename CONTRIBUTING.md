@@ -121,12 +121,12 @@ Checklist:
 4. Create a [new release][new-release].
 5. Follow the same format as [1.1.0][release-110].
 
-[issues-tracker]: https://github.com/pelletier/go-toml/issues
-[bug-report]: https://github.com/pelletier/go-toml/issues/new?template=bug_report.md
-[godoc]: https://godoc.org/github.com/pelletier/go-toml
+[issues-tracker]: https://github.com/skyzyx/go-toml/issues
+[bug-report]: https://github.com/skyzyx/go-toml/issues/new?template=bug_report.md
+[godoc]: https://godoc.org/github.com/skyzyx/go-toml
 [readme]: ./README.md
 [fork]: https://help.github.com/articles/fork-a-repo
 [pull-request]: https://help.github.com/en/articles/creating-a-pull-request
-[releases]: https://github.com/pelletier/go-toml/releases
-[new-release]: https://github.com/pelletier/go-toml/releases/new
-[release-110]: https://github.com/pelletier/go-toml/releases/tag/v1.1.0
+[releases]: https://github.com/skyzyx/go-toml/releases
+[new-release]: https://github.com/skyzyx/go-toml/releases/new
+[release-110]: https://github.com/skyzyx/go-toml/releases/tag/v1.1.0

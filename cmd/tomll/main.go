@@ -12,7 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/pelletier/go-toml"
+	"github.com/skyzyx/go-toml"
 )
 
 func main() {
