@@ -1,4 +1,4 @@
-module github.com/skyzyx/go-toml
+module github.com/skyzyx/go-toml-fork
 
 go 1.14
 
