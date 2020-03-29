@@ -274,6 +274,7 @@ func (t *Tree) writeTo(w io.Writer, indent, keyspace string, bytesCount int64, a
 	return t.WriteToOrdered(w, indent, keyspace, bytesCount, arraysOneElementPerLine, OrderAlphabetical, false)
 }
 
+// WriteToOrdered is an advanced implementation of WriteTo.
 func (t *Tree) WriteToOrdered(w io.Writer, indent, keyspace string, bytesCount int64, arraysOneElementPerLine bool, ord marshalOrder, parentCommented bool) (int64, error) {
 	var orderedVals []sortNode
 
