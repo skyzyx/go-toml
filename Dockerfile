@@ -1,6 +1,6 @@
 FROM golang:1.14-alpine3.11 as builder
 
-WORKDIR /go/src/github.com/skyzyx/go-toml
+WORKDIR /go/src/github.com/skyzyx/go-toml-fork
 
 COPY . .
 ENV CGO_ENABLED=0

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml"
 )
 
 type queryTestNode struct {

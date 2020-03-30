@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml"
 )
 
 // dump path tree to a string
