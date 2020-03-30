@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	toml "github.com/skyzyx/go-toml-fork-fork"
+	toml "github.com/skyzyx/go-toml-fork"
 )
 
 func Example_tree() {
