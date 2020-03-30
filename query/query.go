@@ -3,7 +3,7 @@ package query
 import (
 	"time"
 
-	"github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml"
 )
 
 // NodeFilterFn represents a user-defined filter function, for use with

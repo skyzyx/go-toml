@@ -3,7 +3,7 @@ package query
 import (
 	"fmt"
 
-	"github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml"
 )
 
 // base match

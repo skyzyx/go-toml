@@ -3,7 +3,7 @@ package query
 import (
 	"testing"
 
-	"github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml"
 )
 
 func testQLFlow(t *testing.T, input string, expectedFlow []token) {

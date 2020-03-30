@@ -17,8 +17,8 @@ stages:
       inputs:
         version: "1.14"
     - script: echo "##vso[task.setvariable variable=PATH]${PATH}:/home/vsts/go/bin/"
-    - script: mkdir -p ${HOME}/go/src/github.com/skyzyx/go-toml
-    - script: cp -R . ${HOME}/go/src/github.com/skyzyx/go-toml
+    - script: mkdir -p ${HOME}/go/src/github.com/skyzyx/go-toml-fork
+    - script: cp -R . ${HOME}/go/src/github.com/skyzyx/go-toml-fork
     - task: Bash@3
       inputs:
         filePath: './fuzzit.sh'
@@ -90,8 +90,8 @@ stages:
       inputs:
         version: "1.14"
     - script: echo "##vso[task.setvariable variable=PATH]${PATH}:/home/vsts/go/bin/"
-    - script: mkdir -p ${HOME}/go/src/github.com/skyzyx/go-toml
-    - script: cp -R . ${HOME}/go/src/github.com/skyzyx/go-toml
+    - script: mkdir -p ${HOME}/go/src/github.com/skyzyx/go-toml-fork
+    - script: cp -R . ${HOME}/go/src/github.com/skyzyx/go-toml-fork
     - task: Bash@3
       inputs:
         filePath: './fuzzit.sh'

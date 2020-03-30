@@ -13,7 +13,7 @@ go get -u github.com/dvyukov/go-fuzz/go-fuzz github.com/dvyukov/go-fuzz/go-fuzz-
 # before using `fuzzit create job`
 TARGET=toml-fuzzer
 
-go-fuzz-build -libfuzzer -o ${TARGET}.a github.com/skyzyx/go-toml
+go-fuzz-build -libfuzzer -o ${TARGET}.a github.com/skyzyx/go-toml-fork
 clang -fsanitize=fuzzer ${TARGET}.a -o ${TARGET}
 
 # install fuzzit for talking to fuzzit.dev service
