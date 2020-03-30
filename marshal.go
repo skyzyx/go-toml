@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	toml "github.com/pelletier/go-toml"
 )
 
 const (
@@ -304,7 +302,7 @@ func (e *Encoder) marshal(v interface{}) ([]byte, error) {
 	}
 
 	var buf bytes.Buffer
-	_, err = t.WriteToOrdered(&buf, "", "", 0, true, toml.OrderPreserve, false)
+	_, err = t.WriteToOrdered(&buf, "", "", 0, true, OrderPreserve, false)
 
 	return buf.Bytes(), err
 }
