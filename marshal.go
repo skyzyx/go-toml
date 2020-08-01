@@ -1085,7 +1085,7 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 			return val.Convert(mtype), nil
 		case reflect.Float32, reflect.Float64:
 			val := reflect.ValueOf(tval)
-			if !val.Type().ConvertibleTo(mtype) || val.Kind() == reflect.Int64 {
+			if !val.Type().ConvertibleTo(mtype) {
 				_, file, line, _ := runtime.Caller(0)
 				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
