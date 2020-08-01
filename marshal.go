@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1034,7 +1035,8 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 
 			// if this passes for when mtype is reflect.Struct, tval is a time.LocalTime
 			if !val.Type().ConvertibleTo(mtype) {
-				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
+				_, file, line, _ := runtime.Caller(1)
+				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
 
 			return val.Convert(mtype), nil
@@ -1042,7 +1044,8 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 			val := reflect.ValueOf(tval)
 			// stupidly, int64 is convertible to string. So special case this.
 			if !val.Type().ConvertibleTo(mtype) {
-				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
+				_, file, line, _ := runtime.Caller(1)
+				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
 
 			return val.Convert(mtype), nil
@@ -1051,12 +1054,14 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 			if mtype.Kind() == reflect.Int64 && mtype == reflect.TypeOf(time.Duration(1)) && val.Kind() == reflect.String {
 				d, err := time.ParseDuration(val.String())
 				if err != nil {
-					return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v. %s", tval, tval, mtype.String(), err)
+					_, file, line, _ := runtime.Caller(1)
+					return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v. %s", file, line, tval, tval, mtype.String(), err)
 				}
 				return reflect.ValueOf(d), nil
 			}
 			if !val.Type().ConvertibleTo(mtype) {
-				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
+				_, file, line, _ := runtime.Caller(1)
+				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
 			if reflect.Indirect(reflect.New(mtype)).OverflowInt(val.Convert(reflect.TypeOf(int64(0))).Int()) {
 				return reflect.ValueOf(nil), fmt.Errorf("%v(%T) would overflow %v", tval, tval, mtype.String())
@@ -1066,7 +1071,8 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 			val := reflect.ValueOf(tval)
 			if !val.Type().ConvertibleTo(mtype) {
-				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
+				_, file, line, _ := runtime.Caller(1)
+				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
 
 			if val.Convert(reflect.TypeOf(int(1))).Int() < 0 {
@@ -1080,7 +1086,8 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 		case reflect.Float32, reflect.Float64:
 			val := reflect.ValueOf(tval)
 			if !val.Type().ConvertibleTo(mtype) || val.Kind() == reflect.Int64 {
-				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
+				_, file, line, _ := runtime.Caller(1)
+				return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v", file, line, tval, tval, mtype.String())
 			}
 			if reflect.Indirect(reflect.New(mtype)).OverflowFloat(val.Convert(reflect.TypeOf(float64(0))).Float()) {
 				return reflect.ValueOf(nil), fmt.Errorf("%v(%T) would overflow %v", tval, tval, mtype.String())
@@ -1098,9 +1105,11 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 			if isOtherSequence(mtype) && isOtherSequence(reflect.TypeOf(t)) {
 				return d.valueFromOtherSliceI(mtype, t)
 			}
-			return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v(%v)", tval, tval, mtype, mtype.Kind())
+			_, file, line, _ := runtime.Caller(1)
+			return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v(%v)", file, line, tval, tval, mtype, mtype.Kind())
 		default:
-			return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v(%v)", tval, tval, mtype, mtype.Kind())
+			_, file, line, _ := runtime.Caller(1)
+			return reflect.ValueOf(nil), fmt.Errorf("%s:%d: Can't convert %v(%T) to %v(%v)", file, line, tval, tval, mtype, mtype.Kind())
 		}
 	}
 }
