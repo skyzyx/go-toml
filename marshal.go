@@ -1041,7 +1041,7 @@ func (d *Decoder) valueFromToml(mtype reflect.Type, tval interface{}, mval1 *ref
 		case reflect.String:
 			val := reflect.ValueOf(tval)
 			// stupidly, int64 is convertible to string. So special case this.
-			if !val.Type().ConvertibleTo(mtype) || val.Kind() == reflect.Int64 {
+			if !val.Type().ConvertibleTo(mtype) {
 				return reflect.ValueOf(nil), fmt.Errorf("Can't convert %v(%T) to %v", tval, tval, mtype.String())
 			}
 
