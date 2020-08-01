@@ -12,7 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	toml "github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml-fork"
 )
 
 func main() {

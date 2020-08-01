@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	toml "github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml-fork"
 )
 
 type queryTestNode struct {

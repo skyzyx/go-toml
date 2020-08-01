@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	toml "github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml-fork"
 )
 
 // Lexer state function

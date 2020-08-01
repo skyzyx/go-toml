@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	toml "github.com/skyzyx/go-toml"
+	toml "github.com/skyzyx/go-toml-fork"
 )
 
 // base match
