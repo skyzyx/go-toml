@@ -146,7 +146,7 @@ func (p *tomlParser) parseGroup() tomlParserStateFn {
 	}
 	for _, item := range p.seenTableKeys {
 		if item == key.val {
-			p.raiseError(key, "duplicated tables")
+			p.raiseError(key, fmt.Sprintf("duplicated tables; %s has been seen before", key.val))
 		}
 	}
 
